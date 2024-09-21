@@ -31,7 +31,7 @@ class MyNet(ME.MinkowskiNetwork):
           kernel_size=5,
           stride=1,
           dilation=1,
-          has_bias=False,
+          bias=False,
           dimension=D)
       self.norm1 = ME.MinkowskiBatchNorm(CHANNELS[1], momentum=bn_momentum)
       self.block1 = self.make_layer(BLOCK_1, BLOCK_2, CHANNELS[1], bn_momentum=bn_momentum, D=D)
@@ -42,7 +42,7 @@ class MyNet(ME.MinkowskiNetwork):
           kernel_size=3,
           stride=2,
           dilation=1,
-          has_bias=False,
+          bias=False,
           dimension=D)
       self.norm2 = ME.MinkowskiBatchNorm(CHANNELS[2], momentum=bn_momentum)
       self.block2 = self.make_layer(BLOCK_1, BLOCK_2, CHANNELS[2], bn_momentum=bn_momentum, D=D)
@@ -53,7 +53,7 @@ class MyNet(ME.MinkowskiNetwork):
           kernel_size=3,
           stride=2,
           dilation=1,
-          has_bias=False,
+          bias=False,
           dimension=D)
       self.norm3 = ME.MinkowskiBatchNorm(CHANNELS[3], momentum=bn_momentum)
       self.block3 = self.make_layer(BLOCK_1, BLOCK_2, CHANNELS[3], bn_momentum=bn_momentum, D=D)
@@ -64,7 +64,7 @@ class MyNet(ME.MinkowskiNetwork):
           kernel_size=3,
           stride=2,
           dilation=1,
-          has_bias=False,
+          bias=False,
           dimension=D)
       self.norm4 = ME.MinkowskiBatchNorm(CHANNELS[4], momentum=bn_momentum)
       self.block4 = self.make_layer(BLOCK_1, BLOCK_2, CHANNELS[4], bn_momentum=bn_momentum, D=D)
@@ -75,7 +75,7 @@ class MyNet(ME.MinkowskiNetwork):
           kernel_size=3,
           stride=2,
           dilation=1,
-          has_bias=False,
+          bias=False,
           dimension=D)
       self.norm5 = ME.MinkowskiBatchNorm(CHANNELS[5], momentum=bn_momentum)
       self.block5 = self.make_layer(BLOCK_1, BLOCK_2, CHANNELS[5], bn_momentum=bn_momentum, D=D)
@@ -86,7 +86,7 @@ class MyNet(ME.MinkowskiNetwork):
           kernel_size=3,
           stride=2,
           dilation=1,
-          has_bias=False,
+          bias=False,
           dimension=D)
       self.norm5_tr = ME.MinkowskiBatchNorm(TR_CHANNELS[5], momentum=bn_momentum)
       self.block5_tr = self.make_layer(BLOCK_1, BLOCK_2, TR_CHANNELS[5], bn_momentum=bn_momentum, D=D)
@@ -97,7 +97,7 @@ class MyNet(ME.MinkowskiNetwork):
           kernel_size=3,
           stride=2,
           dilation=1,
-          has_bias=False,
+          bias=False,
           dimension=D)
       self.norm4_tr = ME.MinkowskiBatchNorm(TR_CHANNELS[4], momentum=bn_momentum)
       self.block4_tr = self.make_layer(BLOCK_1, BLOCK_2, TR_CHANNELS[4], bn_momentum=bn_momentum, D=D)
@@ -108,7 +108,7 @@ class MyNet(ME.MinkowskiNetwork):
           kernel_size=3,
           stride=2,
           dilation=1,
-          has_bias=False,
+          bias=False,
           dimension=D)
       self.norm3_tr = ME.MinkowskiBatchNorm(TR_CHANNELS[3], momentum=bn_momentum)
       self.block3_tr = self.make_layer(BLOCK_1, BLOCK_2, TR_CHANNELS[3], bn_momentum=bn_momentum, D=D)
@@ -119,7 +119,7 @@ class MyNet(ME.MinkowskiNetwork):
           kernel_size=last_kernel_size,
           stride=2,
           dilation=1,
-          has_bias=False,
+          bias=False,
           generate_new_coords=True,
           dimension=D)
       self.norm2_tr = ME.MinkowskiBatchNorm(TR_CHANNELS[2], momentum=bn_momentum)
@@ -131,7 +131,7 @@ class MyNet(ME.MinkowskiNetwork):
           kernel_size=3,
           stride=1,
           dilation=1,
-          has_bias=False,
+          bias=False,
           dimension=D)
       # self.norm1_tr = ME.MinkowskiBatchNorm(TR_CHANNELS[1], momentum=bn_momentum)
       # self.block1_tr = self.make_layer(BLOCK_1, BLOCK_2, TR_CHANNELS[1], bn_momentum=bn_momentum, D=D)
@@ -142,7 +142,7 @@ class MyNet(ME.MinkowskiNetwork):
           kernel_size=1,
           stride=1,
           dilation=1,
-          has_bias=True,
+          bias=True,
           dimension=D)
       
       self.pruning = ME.MinkowskiPruning()

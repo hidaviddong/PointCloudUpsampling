@@ -15,7 +15,7 @@ class ResNet(nn.Module):
             out_channels=channels,
             kernel_size= 3,
             stride=1,
-            has_bias=True,
+            bias=True,
             dimension=3)
 
         self.conv1 = ME.MinkowskiConvolution(
@@ -23,7 +23,7 @@ class ResNet(nn.Module):
             out_channels=channels,
             kernel_size= 3,
             stride=1,
-            has_bias=True,
+            bias=True,
             dimension=3)
         
         self.relu = ME.MinkowskiReLU(inplace=True)
@@ -47,20 +47,20 @@ class MyInception_1(nn.Module):
         assert dimension > 0
 
         self.conv1 = ME.MinkowskiConvolution(
-            channels, channels//4, kernel_size=1, stride=stride, dilation=dilation, has_bias=True, dimension=dimension)
+            channels, channels//4, kernel_size=1, stride=stride, dilation=dilation, bias=True, dimension=dimension)
         self.norm1 = ME.MinkowskiBatchNorm(channels//4, momentum=bn_momentum)
         self.conv2 = ME.MinkowskiConvolution(
-            channels//4, channels//4, kernel_size=3, stride=stride, dilation=dilation, has_bias=True, dimension=dimension)
+            channels//4, channels//4, kernel_size=3, stride=stride, dilation=dilation, bias=True, dimension=dimension)
         self.norm2 = ME.MinkowskiBatchNorm(channels//4, momentum=bn_momentum)
         self.conv3 = ME.MinkowskiConvolution(
-            channels//4, channels//2, kernel_size=1, stride=stride, dilation=dilation, has_bias=True, dimension=dimension)
+            channels//4, channels//2, kernel_size=1, stride=stride, dilation=dilation, bias=True, dimension=dimension)
         self.norm3 = ME.MinkowskiBatchNorm(channels//2, momentum=bn_momentum)
         
         self.conv4 = ME.MinkowskiConvolution(
-            channels, channels//4, kernel_size=3, stride=stride, dilation=dilation, has_bias=True, dimension=dimension)
+            channels, channels//4, kernel_size=3, stride=stride, dilation=dilation, bias=True, dimension=dimension)
         self.norm4 = ME.MinkowskiBatchNorm(channels//4, momentum=bn_momentum)
         self.conv5 = ME.MinkowskiConvolution(
-            channels//4, channels//2, kernel_size=3, stride=stride, dilation=dilation, has_bias=True, dimension=dimension)
+            channels//4, channels//2, kernel_size=3, stride=stride, dilation=dilation, bias=True, dimension=dimension)
         self.norm5 = ME.MinkowskiBatchNorm(channels//2, momentum=bn_momentum)
         
         self.relu = ME.MinkowskiReLU(inplace=True)
@@ -104,15 +104,15 @@ class Pyramid_1(nn.Module):
         assert dimension > 0
         
         self.aspp1 = ME.MinkowskiConvolution(
-            channels, channels//4, kernel_size=1, stride=1, dilation=1, has_bias=True, dimension=dimension)
+            channels, channels//4, kernel_size=1, stride=1, dilation=1, bias=True, dimension=dimension)
         self.aspp2 = ME.MinkowskiConvolution(
-            channels, channels//4, kernel_size=3, stride=1, dilation=6, has_bias=True, dimension=dimension)
+            channels, channels//4, kernel_size=3, stride=1, dilation=6, bias=True, dimension=dimension)
         self.aspp3 = ME.MinkowskiConvolution(
-            channels, channels//4, kernel_size=3, stride=1, dilation=12, has_bias=True, dimension=dimension)
+            channels, channels//4, kernel_size=3, stride=1, dilation=12, bias=True, dimension=dimension)
         self.aspp4 = ME.MinkowskiConvolution(
-            channels, channels//4, kernel_size=3, stride=1, dilation=18, has_bias=True, dimension=dimension)
+            channels, channels//4, kernel_size=3, stride=1, dilation=18, bias=True, dimension=dimension)
         self.aspp5 = ME.MinkowskiConvolution(
-            channels, channels//4, kernel_size=1, stride=1, dilation=1, has_bias=True, dimension=dimension)
+            channels, channels//4, kernel_size=1, stride=1, dilation=1, bias=True, dimension=dimension)
         
         self.aspp1_bn = ME.MinkowskiBatchNorm(channels//4, momentum=bn_momentum)
         self.aspp2_bn = ME.MinkowskiBatchNorm(channels//4, momentum=bn_momentum)
@@ -121,7 +121,7 @@ class Pyramid_1(nn.Module):
         self.aspp5_bn = ME.MinkowskiBatchNorm(channels//4, momentum=bn_momentum)
         
         self.conv2 = ME.MinkowskiConvolution(
-            channels//4 * 5, channels, kernel_size=1, stride=1, dilation=1, has_bias=True, dimension=dimension)
+            channels//4 * 5, channels, kernel_size=1, stride=1, dilation=1, bias=True, dimension=dimension)
         self.bn2 = ME.MinkowskiBatchNorm(channels, momentum=bn_momentum)
         
         self.pooling = ME.MinkowskiGlobalPooling()
