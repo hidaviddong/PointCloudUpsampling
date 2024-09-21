@@ -120,7 +120,6 @@ class MyNet(ME.MinkowskiNetwork):
           stride=2,
           dilation=1,
           bias=False,
-          generate_new_coords=True,
           dimension=D)
       self.norm2_tr = ME.MinkowskiBatchNorm(TR_CHANNELS[2], momentum=bn_momentum)
       self.block2_tr = self.make_layer(BLOCK_1, BLOCK_2, TR_CHANNELS[2], bn_momentum=bn_momentum, D=D)
