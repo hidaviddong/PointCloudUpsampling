@@ -178,10 +178,10 @@ class MyNet(ME.MinkowskiNetwork):
     def choose_keep(self, out, coords_T, device):
     	with torch.no_grad():
     		feats = torch.from_numpy(np.expand_dims(np.ones(coords_T.shape[0]), 1))
-    		x = ME.SparseTensor(feats=feats, coords=coords_T).to(device)
+    		x = ME.SparseTensor(features=feats.to(device), coordinates=coords_T.to(device))
     		coords_nums = [len(coords) for coords in x.decomposed_coordinates]
             
-    		row_indices_per_batch = out.coords_man.get_row_indices_per_batch(out.coords_key)
+    		_,row_indices_per_batch = out.coordinate_manager.origin_map(out.coordinate_map_key)
     		keep = torch.zeros(len(out), dtype=torch.bool)
     		for row_indices, ori_coords_num in zip(row_indices_per_batch, coords_nums):
     			coords_num = min(len(row_indices), ori_coords_num)# select top k points.
@@ -249,6 +249,6 @@ class MyNet(ME.MinkowskiNetwork):
       target = self.get_target_by_sp_tensor(out, coords_T)
       keep = self.choose_keep(out_cls, coords_T, device)
       if prune:
-          out = self.pruning(out_cls, keep.cpu())
+          out = self.pruning(out_cls, keep.to(device))
     
       return out, out_cls, target, keep

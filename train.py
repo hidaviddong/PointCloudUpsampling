@@ -39,11 +39,11 @@ def parse_args():
   parser.add_argument("--dataset", default='../Data/ShapeNet/')
   parser.add_argument("--downsample", default=8, help='Downsample Rate')
   parser.add_argument("--num_test", type=int, default=1024, help='how many of the dataset use for testing')
-  parser.add_argument("--dataset_8i", default='../Data/8i_test/8x/')
-  parser.add_argument("--dataset_8i_GT", default='../Data/8i_test/orig/')
-  parser.add_argument("--last_kernel_size", type=int, default=7, help='The final layer kernel size, coordinates get expanded by this')
+  parser.add_argument("--dataset_8i", default='../Data/8i_test/8x/longdress/Ply/')
+  parser.add_argument("--dataset_8i_GT", default='../Data/8i_test/8x/longdress/Ply/')
+  parser.add_argument("--last_kernel_size", type=int, default=5, help='The final layer kernel size, coordinates get expanded by this')
   
-  parser.add_argument("--init_ckpt", default='ckpts/8x_0x_ks7/iter2000.pth')
+  parser.add_argument("--init_ckpt", default='')
   parser.add_argument("--reset", default=False, action='store_true', help='reset training')
   
   parser.add_argument("--lr", type=float, default=8e-4)
@@ -136,7 +136,7 @@ def test2(model, test_dataloader, logger, writer, writername, step, test_pc_erro
         p = ME.utils.batched_coordinates([pc])
         p2 = ME.utils.batched_coordinates([parts_pc2[j]])
         f = torch.from_numpy(np.vstack(np.expand_dims(np.ones(p.shape[0]), 1))).float()
-        x1 = ME.SparseTensor(feats=f, coords=p).to(device)
+        x1 = ME.SparseTensor(features=f.to(device), coordinates=p.to(device))
         
         with torch.no_grad():
             out, out_cls, target, keep = model(x1, coords_T=p2, device=device, prune=True)
@@ -164,7 +164,11 @@ def test2(model, test_dataloader, logger, writer, writername, step, test_pc_erro
       o3d.io.write_point_cloud(GTfile, GT_pcd, write_ascii=True)
       
       rec_pcd = o3d.geometry.PointCloud()
-      rec_pcd.points = o3d.utility.Vector3dVector(rec_pc)
+      logger.info(type(rec_pc))
+      logger.info(rec_pc.shape)
+      
+      rec_pc_np = rec_pc.detach().cpu().numpy()
+      rec_pcd.points = o3d.utility.Vector3dVector(rec_pc_np)
       
       recfile = 'tmp/'+args.prefix+'rec.ply'
       o3d.io.write_point_cloud(recfile, rec_pcd, write_ascii=True)
@@ -255,7 +259,7 @@ def test1(model, test_dataloader, logger, writer, writername, step, args, device
   # loop per batch.
   for i in range(len(test_iter)):
     coords, feats, coords_T = test_iter.next()
-    x = ME.SparseTensor(feats=feats, coords=coords).to(device)
+    x = ME.SparseTensor(features=feats.to(device), coordinates=coords.to(device))
     
     # Forward.
     with torch.no_grad():
@@ -345,7 +349,7 @@ def train(model, train_dataloader, test_dataloader, test_dataloader2, logger, wr
     coords, feats, coords_T = train_iter.next()
     dataloader_time = time.time() - s
 
-    x = ME.SparseTensor(feats=feats, coords=coords).to(device)
+    x = ME.SparseTensor(features=feats.to(device), coordinates=coords.to(device))
 
     if x.__len__() >= 1e10:
       logger.info(f'\n\n\n======= larger than 1e10 ======: {x.__len__()}\n\n\n')
@@ -484,7 +488,7 @@ if __name__ == '__main__':
   logger.info(args)
   writer = SummaryWriter(log_dir=logdir)
 
-  device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+  device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
   logger.info(f'Device:{device}')
 
   # Load data.
@@ -507,6 +511,7 @@ if __name__ == '__main__':
                                       shuffle=False, 
                                       num_workers=mp.cpu_count(),
                                       repeat=False)
+
 
   # 8i dataset
   eighti_filedirs = glob.glob(args.dataset_8i+'*.ply')
