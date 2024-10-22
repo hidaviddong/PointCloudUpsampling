@@ -36,22 +36,20 @@ def getlogger(logdir):
 def parse_args():
   parser = argparse.ArgumentParser(
     formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-  parser.add_argument("--dataset", default='../Data/ShapeNet/')
-  parser.add_argument("--downsample", default=8, help='Downsample Rate')
-  parser.add_argument("--num_test", type=int, default=1024, help='how many of the dataset use for testing')
-  parser.add_argument("--dataset_8i", default='../Data/8i_test/8x/longdress/Ply/')
-  parser.add_argument("--dataset_8i_GT", default='../Data/8i_test/8x/longdress/Ply/')
+  parser.add_argument("--dataset", default='../Data/8i_test/8x/soldier/Ply/')
+  parser.add_argument("--num_test", type=int, default=30, help='how many of the dataset use for testing')
+#   parser.add_argument("--dataset_8i", default='../Data/8i_test/8x/longdress/Ply/')
+#   parser.add_argument("--dataset_8i_GT", default='../Data/8i_test/8x/longdress/Ply/')
   parser.add_argument("--last_kernel_size", type=int, default=5, help='The final layer kernel size, coordinates get expanded by this')
   
   parser.add_argument("--init_ckpt", default='')
   parser.add_argument("--reset", default=False, action='store_true', help='reset training')
   
   parser.add_argument("--lr", type=float, default=8e-4)
-  parser.add_argument("--batch_size", type=int, default=4)
+  parser.add_argument("--batch_size", type=int, default=1)
   parser.add_argument("--global_step", type=int, default=int(64000))
   parser.add_argument("--base_step", type=int, default=int(100),  help='frequency for recording state.')
   parser.add_argument("--test_step", type=int, default=int(2000),  help='frequency for test and save.')
-  # parser.add_argument("--random_seed", type=int, default=4, help='random_seed.')
   
   parser.add_argument("--max_norm", type=float, default=1.,  help='max norm for gradient clip, close if 0')
   parser.add_argument("--clip_value", type=float, default=0,  help='max value for gradient clip, close if 0')
@@ -296,7 +294,7 @@ def test1(model, test_dataloader, logger, writer, writername, step, args, device
   return
 
 
-def train(model, train_dataloader, test_dataloader, test_dataloader2, logger, writer, args, device):
+def train(model, train_dataloader, test_dataloader, logger, writer, args, device):
   # Optimizer.
   optimizer = torch.optim.Adam([{"params":model.parameters(), 'lr':args.lr}], 
                                 betas=(0.9, 0.999), weight_decay=1e-4)
@@ -334,145 +332,139 @@ def train(model, train_dataloader, test_dataloader, test_dataloader2, logger, wr
   logger.info(f'LR: {scheduler.get_lr()}')
   print('==============', start_step)
 
-  train_iter = iter(train_dataloader)
   start_time = time.time()
   sum_loss = 0
   all_metrics = np.zeros((1,3))
   
 
   for i in range(start_step, args.global_step+1):
-    if i%10==0:
-        print(i)
-    optimizer.zero_grad()
-    
-    s = time.time()
-    coords, feats, coords_T = train_iter.next()
-    dataloader_time = time.time() - s
-
-    x = ME.SparseTensor(features=feats.to(device), coordinates=coords.to(device))
-
-    if x.__len__() >= 1e10:
-      logger.info(f'\n\n\n======= larger than 1e10 ======: {x.__len__()}\n\n\n')
-      continue
-  
-    # Forward.
-    _, out_cls, target, keep = model(x, coords_T=coords_T, device=device, prune=False)
-    
-    loss = crit(out_cls.F.squeeze(), target.type(out_cls.F.dtype).to(device))
-    metrics = get_metrics(keep, target)
+    for batch_idx, (coords, feats) in enumerate(train_dataloader):
+        logger.info(f"Processing batch {batch_idx}, batch size: {len(coords)}")
         
-    if torch.isnan(loss) or torch.isinf(loss):
-        logger.info(f'\n== loss is nan ==, Step: {i}\n')
-        continue
+        if i%10==0:
+            print(i)
+        optimizer.zero_grad()
+ 
+        s = time.time()
+        dataloader_time = time.time() - s
         
-    # Backward.    
-    loss.backward()
-    
-    # Optional clip gradient. 
-    if args.max_norm != 0:
-      # clip by norm
-      max_grad_before = max(p.grad.data.abs().max() for p in model.parameters())
-      total_norm = torch.nn.utils.clip_grad_norm_(model.parameters(), args.max_norm)
-      
-      if total_norm > args.max_norm:
-
-        def get_total_norm(parameters, norm_type=2):
-          total_norm = 0.
-          for p in parameters:
-            param_norm = p.grad.data.norm(norm_type)
-            total_norm += param_norm.item() ** norm_type
-          total_norm = total_norm ** (1. / norm_type)
-          return total_norm
-
-        print('total_norm:',
-          '\nBefore: total_norm:,', total_norm, 
-          'max grad:', max_grad_before, 
-          '\nthreshold:', args.max_norm, 
-          '\nAfter:', get_total_norm(model.parameters()), 
-          'max grad:', max(p.grad.data.abs().max() for p in model.parameters()))
-
-    if args.clip_value != 0:
-      torch.nn.utils.clip_grad_value_(model.parameters(), args.clip_value)
-      print('after gradient clip',  max(p.grad.data.abs().max() for p in model.parameters()))
-    
-    optimizer.step()
-    
-    # record.
-    with torch.no_grad():
-      sum_loss += loss.item()
-      all_metrics += np.array(metrics)
-    
-    # Display.
-    if i % args.base_step == 0:
-      # average.
-      with torch.no_grad():
-        sum_loss /= args.base_step
-        all_metrics /= args.base_step
-
-      if np.isinf(sum_loss):
-        logger.info('inf error!')
-        sys.exit(0)
+        x = ME.SparseTensor(features=feats.float().to(device), coordinates=coords.to(device))
+        if x.__len__() >= 1e10:
+          logger.info(f'\n\n\n======= larger than 1e10 ======: {x.__len__()}\n\n\n')
+          continue
         
-      if np.isnan(sum_loss):
-        logger.info('NaN error!')
-        sys.exit(0)
+        # Forward.
+        _, out_cls, target, keep = model(x,feats,coords,device,False)
+        # TODO beacuase use out_cls.F. will throw an Error: Target size (torch.Size([201226])) must be the same as input size (torch.Size([201226, 3]))
+        loss = crit(out_cls.F[:, 0], target.type(out_cls.F.dtype).to(device))
+        metrics = get_metrics(keep, target)
 
-      # logger.
-      logger.info(f'\nIteration: {i}')
-      logger.info(f'Running time: {((time.time()-start_time)/60):.2f} min')
-      logger.info(f'Data Loading time: {dataloader_time:.5f} s')
-      logger.info(f'Sum Loss: {sum_loss:.4f}')
-      logger.info(f'Metrics (prec, recal, IOU): {np.round(all_metrics, 4).tolist()}')
+        if torch.isnan(loss) or torch.isinf(loss):
+            logger.info(f'\n== loss is nan ==, Step: {i}\n')
+            continue
+
+        # Backward.    
+        loss.backward()
+        torch.cuda.empty_cache()
+
+        # Optional clip gradient. 
+        if args.max_norm != 0:
+          # clip by norm
+          max_grad_before = max(p.grad.data.abs().max() for p in model.parameters())
+          total_norm = torch.nn.utils.clip_grad_norm_(model.parameters(), args.max_norm)
+
+          if total_norm > args.max_norm:
+
+            def get_total_norm(parameters, norm_type=2):
+              total_norm = 0.
+              for p in parameters:
+                param_norm = p.grad.data.norm(norm_type)
+                total_norm += param_norm.item() ** norm_type
+              total_norm = total_norm ** (1. / norm_type)
+              return total_norm
+
+            print('total_norm:',
+              '\nBefore: total_norm:,', total_norm, 
+              'max grad:', max_grad_before, 
+              '\nthreshold:', args.max_norm, 
+              '\nAfter:', get_total_norm(model.parameters()), 
+              'max grad:', max(p.grad.data.abs().max() for p in model.parameters()))
+
+        if args.clip_value != 0:
+          torch.nn.utils.clip_grad_value_(model.parameters(), args.clip_value)
+          print('after gradient clip',  max(p.grad.data.abs().max() for p in model.parameters()))
+
+        optimizer.step()
+
+        # record.
+        with torch.no_grad():
+          sum_loss += loss.item()
+          all_metrics += np.array(metrics)
+
+        # Display.
+        if i % args.base_step == 0:
+          # average.
+          with torch.no_grad():
+            sum_loss /= args.base_step
+            all_metrics /= args.base_step
+
+          if np.isinf(sum_loss):
+            logger.info('inf error!')
+            sys.exit(0)
+
+          if np.isnan(sum_loss):
+            logger.info('NaN error!')
+            sys.exit(0)
+
+          # logger.
+          logger.info(f'\nIteration: {i}')
+          logger.info(f'Running time: {((time.time()-start_time)/60):.2f} min')
+          logger.info(f'Data Loading time: {dataloader_time:.5f} s')
+          logger.info(f'Sum Loss: {sum_loss:.4f}')
+          logger.info(f'Metrics (prec, recal, IOU): {np.round(all_metrics, 4).tolist()}')
 
 
-      # writer.
-      writer.add_scalars(main_tag='train/losses', 
-                        tag_scalar_dict={'sum_loss' :sum_loss},
-                        global_step=i)
+          # writer.
+          writer.add_scalars(main_tag='train/losses', 
+                            tag_scalar_dict={'sum_loss' :sum_loss},
+                            global_step=i)
 
-      writer.add_scalars(main_tag='train/metrics', 
-                        tag_scalar_dict={'Precision': all_metrics[0,0],
-                                         'Recall': all_metrics[0,1],
-                                         'IoU': all_metrics[0,2]},
-                        global_step=i)
-      
-      # return 0.
-      sum_loss = 0.
-      all_metrics = np.zeros((1,3))
+          writer.add_scalars(main_tag='train/metrics', 
+                            tag_scalar_dict={'Precision': all_metrics[0,0],
+                                             'Recall': all_metrics[0,1],
+                                             'IoU': all_metrics[0,2]},
+                            global_step=i)
 
-      # empty cache.
-      torch.cuda.empty_cache()
-      
-    if i % (args.test_step) == 0:
-      logger.info(f'\n==========Evaluation: iter {i}==========')
-      # save.
-      logger.info(f'save checkpoints: {ckptdir}/iter{str(i)}')
-      torch.save({'step': i, 'model': model.state_dict(),
-                  'optimizer':  optimizer.state_dict(),
-                  }, os.path.join(ckptdir, 'iter' + str(i) + '.pth'))
+          # return 0.
+          sum_loss = 0.
+          all_metrics = np.zeros((1,3))
 
-      # Evaluation.
-      logger.info(f'\n=====Evaluation: iter {i} =====')
-      with torch.no_grad():
-        test1(model=model, test_dataloader=test_dataloader, 
-          logger=logger, writer=writer, writername='eval', step=i, args=args, device=device)
+          # empty cache.
+          torch.cuda.empty_cache()
 
-      torch.cuda.empty_cache()
+        if i % (args.test_step) == 0:
+          logger.info(f'\n==========Evaluation: iter {i}==========')
+          # save.
+          logger.info(f'save checkpoints: {ckptdir}/iter{str(i)}')
+          torch.save({'step': i, 'model': model.state_dict(),
+                      'optimizer':  optimizer.state_dict(),
+                      }, os.path.join(ckptdir, 'iter' + str(i) + '.pth'))
 
-    if i % (args.test_step) == 0:
-      # Evaluation 8i.
-      logger.info(f'\n=====Evaluation: iter {i} 8i =====')
-      with torch.no_grad():
-        test2(model=model, test_dataloader=test_dataloader2, 
-          logger=logger, writer=writer, writername='eval_8i', step=i, test_pc_error=True, args=args, device=device, First_eval=First_eval)
-        First_eval=False
-      torch.cuda.empty_cache()
+          # Evaluation.
+          logger.info(f'\n=====Evaluation: iter {i} =====')
+          with torch.no_grad():
+            test1(model=model, test_dataloader=test_dataloader, 
+              logger=logger, writer=writer, writername='eval', step=i, args=args, device=device)
 
-      model.to(device)
+          torch.cuda.empty_cache()
 
-    if i % int(args.lr_step) == 0:
-      scheduler.step()
-      logger.info(f'LR: {scheduler.get_lr()}')
+          model.to(device)
+
+        if i % int(args.lr_step) == 0:
+          scheduler.step()
+          logger.info(f'LR: {scheduler.get_lr()}')
+
+        logger.info(f"Processing batch {batch_idx} done! ")
     
   writer.close()
     
@@ -492,43 +484,25 @@ if __name__ == '__main__':
   logger.info(f'Device:{device}')
 
   # Load data.
-  filedirs = glob.glob(args.dataset+'*.h5')
+  filedirs = glob.glob(args.dataset+'*.ply')
+  
   filedirs = sorted(filedirs)
-  logger.info(f'Files length: {len(filedirs)}')
+  logger.info(f'Dataset Files length: {len(filedirs)}')
 
   train_dataloader = make_data_loader(files=filedirs[int(args.num_test):],
-                                      GT_folder=None,
                                       batch_size=args.batch_size,
-                                      downsample=args.downsample,
                                       shuffle=True, 
                                       num_workers=mp.cpu_count(),
                                       repeat=True)
   
   test_dataloader = make_data_loader( files=filedirs[:int(args.num_test)],
-                                      GT_folder=None,
                                       batch_size=args.batch_size, 
-                                      downsample=args.downsample,
                                       shuffle=False, 
                                       num_workers=mp.cpu_count(),
                                       repeat=False)
-
-
-  # 8i dataset
-  eighti_filedirs = glob.glob(args.dataset_8i+'*.ply')
-  eighti_filedirs = sorted(eighti_filedirs)
-  logger.info(f'Files length: {len(eighti_filedirs)}')
-
-  eighti_dataloader = make_data_loader( files=eighti_filedirs, 
-                                        GT_folder=args.dataset_8i_GT,
-                                        batch_size=1, 
-                                        downsample=args.downsample,
-                                        shuffle=False,
-                                        num_workers=1,
-                                        repeat=False)
-
   # Network.
   model = MyNet(last_kernel_size=args.last_kernel_size).to(device)
   logger.info(model)
 
-  train(model, train_dataloader, test_dataloader, eighti_dataloader, logger, writer, args, device)
+  train(model, train_dataloader, test_dataloader, logger, writer, args, device)
 
