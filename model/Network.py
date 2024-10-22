@@ -13,8 +13,8 @@ class MyNet(ME.MinkowskiNetwork):
     BLOCK_2 = Pyramid_1
     
     def __init__(self,
-                 in_channels=1,
-                 out_channels=1,
+                 in_channels=3,
+                 out_channels=3,
                  bn_momentum=0.1,
                  last_kernel_size=5,
                  D=3):
@@ -175,80 +175,83 @@ class MyNet(ME.MinkowskiNetwork):
     
           return torch.Tensor(target).bool()
     
-    def choose_keep(self, out, coords_T, device):
+    def choose_keep(self, out, feats,coords_T, device):
     	with torch.no_grad():
-    		feats = torch.from_numpy(np.expand_dims(np.ones(coords_T.shape[0]), 1))
+#     		feats = torch.from_numpy(np.expand_dims(np.ones(coords_T.shape[0]), 1))
     		x = ME.SparseTensor(features=feats.to(device), coordinates=coords_T.to(device))
     		coords_nums = [len(coords) for coords in x.decomposed_coordinates]
-            
     		_,row_indices_per_batch = out.coordinate_manager.origin_map(out.coordinate_map_key)
     		keep = torch.zeros(len(out), dtype=torch.bool)
     		for row_indices, ori_coords_num in zip(row_indices_per_batch, coords_nums):
-    			coords_num = min(len(row_indices), ori_coords_num)# select top k points.
-    			values, indices = torch.topk(out.F[row_indices].squeeze(), int(coords_num))
+    			coords_num = min(len(row_indices), ori_coords_num)# select top k points.             
+#     			print(f"coords_num: {coords_num}")
+#     			print(f"out.F shape: {out.F.shape}")
+#     			print(f"row_indices shape: {row_indices.shape}")
+#     			print(f"out.F[row_indices] shape: {out.F[row_indices].shape}")
+    			values, indices = torch.topk(out.F[row_indices], int(coords_num), dim=0)
     			keep[row_indices[indices]]=True
     	return keep
 
-    def forward(self, x, coords_T, device, prune=True):
-      out_s1 = self.conv1(x)
-      out_s1 = self.norm1(out_s1)
-      out_s1 = self.block1(out_s1)
-      out = MEF.relu(out_s1)
+    def forward(self, x, feats, coords_T, device, prune=True):
+        out_s1 = self.conv1(x)
+        out_s1 = self.norm1(out_s1)
+        out_s1 = self.block1(out_s1)
+        out = MEF.relu(out_s1)
     
-      out_s2 = self.conv2(out)
-      out_s2 = self.norm2(out_s2)
-      out_s2 = self.block2(out_s2)
-      out = MEF.relu(out_s2)
+        out_s2 = self.conv2(out)
+        out_s2 = self.norm2(out_s2)
+        out_s2 = self.block2(out_s2)
+        out = MEF.relu(out_s2)
     
-      out_s4 = self.conv3(out)
-      out_s4 = self.norm3(out_s4)
-      out_s4 = self.block3(out_s4)
-      out = MEF.relu(out_s4)
+        out_s4 = self.conv3(out)
+        out_s4 = self.norm3(out_s4)
+        out_s4 = self.block3(out_s4)
+        out = MEF.relu(out_s4)
     
-      out_s8 = self.conv4(out)
-      out_s8 = self.norm4(out_s8)
-      out_s8 = self.block4(out_s8)
-      out = MEF.relu(out_s8)
+        out_s8 = self.conv4(out)
+        out_s8 = self.norm4(out_s8)
+        out_s8 = self.block4(out_s8)
+        out = MEF.relu(out_s8)
       
-      out_s16 = self.conv5(out)
-      out_s16 = self.norm5(out_s16)
-      out_s16 = self.block5(out_s16)
-      out = MEF.relu(out_s16)
+        out_s16 = self.conv5(out)
+        out_s16 = self.norm5(out_s16)
+        out_s16 = self.block5(out_s16)
+        out = MEF.relu(out_s16)
     
-      out = self.conv5_tr(out)
-      out = self.norm5_tr(out)
-      out = self.block5_tr(out)
-      out_s8_tr = MEF.relu(out)
+        out = self.conv5_tr(out)
+        out = self.norm5_tr(out)
+        out = self.block5_tr(out)
+        out_s8_tr = MEF.relu(out)
     
-      out = ME.cat(out_s8_tr, out_s8)
+        out = ME.cat(out_s8_tr, out_s8)
     
-      out = self.conv4_tr(out)
-      out = self.norm4_tr(out)
-      out = self.block4_tr(out)
-      out_s4_tr = MEF.relu(out)
+        out = self.conv4_tr(out)
+        out = self.norm4_tr(out)
+        out = self.block4_tr(out)
+        out_s4_tr = MEF.relu(out)
     
-      out = ME.cat(out_s4_tr, out_s4)
+        out = ME.cat(out_s4_tr, out_s4)
     
-      out = self.conv3_tr(out)
-      out = self.norm3_tr(out)
-      out = self.block3_tr(out)
-      out_s2_tr = MEF.relu(out)
+        out = self.conv3_tr(out)
+        out = self.norm3_tr(out)
+        out = self.block3_tr(out)
+        out_s2_tr = MEF.relu(out)
     
-      out = ME.cat(out_s2_tr, out_s2)
+        out = ME.cat(out_s2_tr, out_s2)
     
-      out = self.conv2_tr(out)
-      out = self.norm2_tr(out)
-      out = self.block2_tr(out)
-      out_s1_tr = MEF.relu(out)
+        out = self.conv2_tr(out)
+        out = self.norm2_tr(out)
+        out = self.block2_tr(out)
+        out_s1_tr = MEF.relu(out)
       
-      out = out_s1_tr + out_s1
-      out = self.conv1_tr(out)
-      out = MEF.relu(out)
+        out = out_s1_tr + out_s1
+        out = self.conv1_tr(out)
+        out = MEF.relu(out)
       
-      out_cls = self.final(out)
-      target = self.get_target_by_sp_tensor(out, coords_T)
-      keep = self.choose_keep(out_cls, coords_T, device)
-      if prune:
-          out = self.pruning(out_cls, keep.to(device))
+        out_cls = self.final(out)
+        target = self.get_target_by_sp_tensor(out, coords_T)
+        keep = self.choose_keep(out_cls,feats,coords_T, device)
+        if prune:
+            out = self.pruning(out_cls, keep.to(device))
     
-      return out, out_cls, target, keep
+        return out, out_cls, target, keep
