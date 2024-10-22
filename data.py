@@ -36,7 +36,7 @@ def loadh5(filedir, color_format='rgb'):
 
   return coords, feats
 
-def loadply(filedir, color_format='geometry'):
+def loadply(filedir):
   """Load coords & feats from ply file.
   
   Arguments: file direction.
@@ -44,16 +44,10 @@ def loadply(filedir, color_format='geometry'):
   Returns: coords & feats.
   """
   pcd = o3d.io.read_point_cloud(filedir)
+  
   coords = np.asarray(pcd.points)
-  # feats = np.asarray(pcd.colors)
-  
-  if color_format=='geometry':
-    feats = np.expand_dims(np.ones(coords.shape[0]), 1)
-  elif color_format == 'None':
-    return coords
-  
-  feats = feats.astype('float32')
-
+  feats = np.asarray(pcd.colors)
+    
   return coords, feats
 
 class InfSampler(Sampler):
@@ -88,87 +82,77 @@ class InfSampler(Sampler):
 
 
 class Dataset(torch.utils.data.Dataset):
+    def __init__(self, files):
+        self.files = files
 
-    def __init__(self, files, GT_folder, downsample, feature_format='geometry'):
-        self.coords = []
-        self.feats = []
-        self.coords_T = []
-        self.downsample = downsample
-        if GT_folder==None:     ## Finding out whether to downsample or not.
-            self.ds = True
-        else:
-            self.ds = False
-        
-        for i,f in enumerate(files):
-            if self.ds:     # If need to downsample
-                if f.endswith('.h5'):
-                    coords, feats = loadh5(f, feature_format)
-                    coords_T = coords
-                elif f.endswith('.ply'):
-                    coords, feats = loadply(f, feature_format)
-                    coords_T = coords
-            else:
-                name = os.path.basename(f)
-                gt_file = os.path.join(GT_folder, name)
-                if not os.path.exists(gt_file):
-                    print(gt_file)
-                    print('Error, File does not exist in GT folder')
-                    continue
-                
-                if f.endswith('.h5'):
-                    coords, feats = loadh5(f, feature_format)
-                    coords_T = loadh5(gt_file, 'None')
-                elif f.endswith('.ply'):
-                    coords, feats = loadply(f, feature_format)
-                    coords_T = loadply(gt_file, 'None')
-            
-            
-            self.coords.append(coords)
-            self.feats.append(feats)
-            self.coords_T.append(coords_T)
-            
     def __len__(self):
-        return len(self.coords)
+        return len(self.files)
+    
+    def __getitem__(self, idx):
+        file_path = self.files[idx]
+        coords,feats = loadply(file_path)
+        return (coords, feats)
+        
+class PartialPlyDataset(torch.utils.data.Dataset):
+    def __init__(self, files, parts=5):
+        """
+        Initialize the dataset
+        :param files: List of ply file paths
+        :param parts: Number of parts to divide each file into
+        """
+        self.files = files
+        self.parts = parts
+        self.current_file_index = -1
+        self.current_coords = None
+        self.current_feats = None
+#         print(f"Initializing dataset with {len(files)} files, each divided into {parts} parts")
+
+    def __len__(self):
+        """Return the total length of the dataset (number of files * parts per file)"""
+        return len(self.files) * self.parts
 
     def __getitem__(self, idx):
-        if self.ds:
-            coords = self.coords[idx]
-            feats = self.feats[idx]
-            coords_T = self.coords_T[idx]
-            
-            N = coords_T.shape[0]
-            N2 = N//self.downsample
-            idx = np.random.choice(N, N2, replace=False)
-            coords = coords[idx]
-            feats = feats[idx]
-            return (coords, feats, coords_T)
-        else:
-            return (self.coords[idx], self.feats[idx], self.coords_T[idx])
+        """
+        Get the data for a specific index
+        :param idx: Index
+        :return: Tuple of (coords, feats)
+        """
+        file_index = idx // self.parts
+        part = idx % self.parts
+
+        if file_index != self.current_file_index or self.current_coords is None:
+            self.load_new_file(file_index)
+
+        total_points = len(self.current_coords)
+        points_per_part = total_points // self.parts
+        start = part * points_per_part
+        end = (part + 1) * points_per_part if part < self.parts - 1 else total_points
+
+#         print(f"Fetching part {part + 1}/{self.parts} of file {file_index + 1}/{len(self.files)}")
+#         print(f"Point cloud range: {start} to {end}, total points: {end - start}")
+
+        return (self.current_coords[start:end], self.current_feats[start:end])
+
+    def load_new_file(self, file_index):
+        """
+        Load a new ply file
+        :param file_index: Index of the file to load
+        """
+        self.current_file_index = file_index
+        file_path = self.files[file_index]
+#         print(f"Loading new file: {file_path}")
+        self.current_coords, self.current_feats = loadply(file_path)
+#         print(f"File loaded, total points: {len(self.current_coords)}")
         
 
-def collate_pointcloud_fn(list_data):
-    new_list_data = []
-    num_removed = 0
-    for data in list_data:
-        if data is not None:
-            new_list_data.append(data)
-        else:
-            num_removed += 1
+def collate_pointcloud_fn(batch):
+    coords, feats = batch[0]
+    coords_batch = ME.utils.batched_coordinates([coords])
+    feats_batch = torch.from_numpy(feats).float()
+    return coords_batch, feats_batch
 
-    list_data = new_list_data
-
-    if len(list_data) == 0:
-        raise ValueError('No data in the batch')
-
-    coords, feats, coords_T = list(zip(*list_data))
-
-    coords_batch = ME.utils.batched_coordinates(coords)
-    feats_batch = torch.from_numpy(np.vstack(feats)).float()
-    coords_T_batch = ME.utils.batched_coordinates(coords_T)
-
-    return coords_batch, feats_batch, coords_T_batch
-
-def make_data_loader(files, GT_folder, batch_size, downsample, shuffle, num_workers, repeat):
+def make_data_loader(files, batch_size, shuffle, num_workers, repeat):
+    
     args = {
         'batch_size': batch_size,
         'num_workers': num_workers,
@@ -177,10 +161,9 @@ def make_data_loader(files, GT_folder, batch_size, downsample, shuffle, num_work
         'drop_last': False
     }
     
-    start_time = time.time()
-    print("Going to load the whole dataset in the memory, No. of files = ", len(files))
-    dataset = Dataset(files, GT_folder, downsample)
-    print("Time taken to load the dataset: ", round(time.time() - start_time, 4))
+    
+    dataset = PartialPlyDataset(files,2)
+#     dataset = Dataset(files)
     
     if repeat:
         args['sampler'] = InfSampler(dataset, shuffle)
